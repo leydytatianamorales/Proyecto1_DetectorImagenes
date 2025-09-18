@@ -1,0 +1,23 @@
+#venv/
+#__pycache__/
+#static/uploads/
+#*.pyc
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.venv/
+
+# IDEs
+.vscode/
+.idea/
+
+# sistema
+.DS_Store
+Thumbs.db
+
+# uploads y archivos temporales
+static/uploads/
