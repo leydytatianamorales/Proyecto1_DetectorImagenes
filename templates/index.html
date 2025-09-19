@@ -4,10 +4,53 @@
     <title>Detector de Manipulación de Imágenes</title>
 </head>
 <body>
+<<<<<<< HEAD
     <h1>Sube una imagen para analizar</h1>
     <form action="/analyze" method="post" enctype="multipart/form-data">
         <input type="file" name="file" accept="image/*" required>
         <button type="submit">Analizar</button>
     </form>
+=======
+  <h1>Detector Forense de Imágenes</h1>
+  <form action="/" method="post" enctype="multipart/form-data">
+    <label>Imagen original: <input type="file" name="original" accept="image/*" required></label><br><br>
+    <label>Imagen sospechosa: <input type="file" name="sospechosa" accept="image/*" required></label><br><br>
+    <button type="submit">Analizar</button>
+  </form>
+
+  {% if error %}
+    <p style="color:red">{{ error }}</p>
+  {% endif %}
+
+  {% if img1_url %}
+    <h3>Original</h3>
+    <img src="{{ img1_url }}" width="320">
+  {% endif %}
+  {% if img2_url %}
+    <h3>Sospechosa</h3>
+    <img src="{{ img2_url }}" width="320">
+  {% endif %}
+
+  {% if meta1 %}
+    <h3>Metadatos - Original</h3>
+    <pre>{{ meta1 | tojson(indent=2) }}</pre>
+  {% endif %}
+  {% if meta2 %}
+    <h3>Metadatos - Sospechosa</h3>
+    <pre>{{ meta2 | tojson(indent=2) }}</pre>
+  {% endif %}
+
+  {% if hash1 %}
+    <h3>Hashes</h3>
+    <p>Hash original: {{ hash1 }}</p>
+    <p>Hash sospechosa: {{ hash2 }}</p>
+    <p>Diferencia: {{ hashdiff }}</p>
+  {% endif %}
+
+  {% if ela_url %}
+    <h3>Resultado ELA</h3>
+    <img src="{{ ela_url }}" width="640">
+  {% endif %}
+>>>>>>> parent of d3d81d2 (update)
 </body>
 </html>
