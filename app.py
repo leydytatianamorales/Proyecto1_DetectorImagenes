@@ -2,27 +2,29 @@
 import os
 from uuid import uuid4
 from datetime import datetime
-from flask import Flask, render_template, request, url_for, send_file
+from io import BytesIO
+from flask import Flask, render_template, request, send_file, url_for
 from werkzeug.utils import secure_filename
 from PIL import Image, ImageChops, ImageEnhance, ExifTags
 import imagehash
 import piexif
-from io import BytesIO
 
 ALLOWED_EXT = {"png", "jpg", "jpeg", "bmp"}
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
 
+# ----------------------- Almacenamiento temporal -----------------------
+images_storage = {}  # Diccionario temporal: img_id -> BytesIO + info
+
 # ----------------------- Funciones -----------------------
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
 
-def extract_metadata(file_obj):
+def extract_metadata(path_or_file):
     meta = {}
     try:
-        file_obj.seek(0)
-        exif_dict = piexif.load(file_obj.read())
+        exif_dict = piexif.load(path_or_file)
         for ifd in exif_dict:
             for tag, val in exif_dict[ifd].items():
                 name = piexif.TAGS[ifd].get(tag, {}).get("name", str(tag))
@@ -30,8 +32,7 @@ def extract_metadata(file_obj):
         return meta
     except Exception:
         try:
-            file_obj.seek(0)
-            img = Image.open(file_obj)
+            img = Image.open(path_or_file)
             raw = img._getexif()
             if raw:
                 for tag, val in raw.items():
@@ -57,12 +58,11 @@ def get_metadata_safe(file_obj):
 
 def generate_ela(file_obj):
     try:
-        file_obj.seek(0)
         img = Image.open(file_obj).convert("RGB")
-        temp_io = BytesIO()
-        img.save(temp_io, "JPEG", quality=90)
-        temp_io.seek(0)
-        comp = Image.open(temp_io)
+        temp = BytesIO()
+        img.save(temp, "JPEG", quality=90)
+        temp.seek(0)
+        comp = Image.open(temp)
         diff = ImageChops.difference(img, comp)
         diff = ImageEnhance.Brightness(diff).enhance(30.0)
         ela_io = BytesIO()
@@ -73,22 +73,18 @@ def generate_ela(file_obj):
         print("ELA error:", e)
         return None
 
-def compare_phash(file_obj1, file_obj2):
+def compare_phash(file1, file2):
     try:
-        file_obj1.seek(0)
-        file_obj2.seek(0)
-        h1 = imagehash.phash(Image.open(file_obj1))
-        h2 = imagehash.phash(Image.open(file_obj2))
+        h1 = imagehash.phash(Image.open(file1))
+        h2 = imagehash.phash(Image.open(file2))
         return str(h1), str(h2), int(h1 - h2)
     except Exception as e:
         return None, None, f"Error: {e}"
 
-def compare_ela(ela1, ela2):
+def compare_ela(file1, file2):
     try:
-        ela1.seek(0)
-        ela2.seek(0)
-        img1 = Image.open(ela1).convert("L")
-        img2 = Image.open(ela2).convert("L")
+        img1 = Image.open(file1).convert("L")
+        img2 = Image.open(file2).convert("L")
         diff = ImageChops.difference(img1, img2)
         total_pixels = diff.size[0] * diff.size[1]
         nonzero = sum(1 for v in diff.getdata() if v != 0)
@@ -98,7 +94,7 @@ def compare_ela(ela1, ela2):
         return None
 
 # ----------------------- Rutas -----------------------
-@app.route("/", methods=["GET","POST"])
+@app.route("/", methods=["GET", "POST"])
 def index():
     context = {"current_year": datetime.now().year}
     if request.method == "POST":
@@ -108,24 +104,37 @@ def index():
             context["error"] = "Carga dos imágenes válidas (jpg/png...)"
             return render_template("index.html", **context)
 
-        # Metadata
-        meta1 = get_metadata_safe(f1)
-        meta2 = get_metadata_safe(f2)
+        # Guardar temporalmente
+        id1 = uuid4().hex
+        id2 = uuid4().hex
+        images_storage[id1] = {"file": BytesIO(f1.read()), "filename": f1.filename}
+        images_storage[id2] = {"file": BytesIO(f2.read()), "filename": f2.filename}
 
-        # Hash perceptual
-        h1, h2, diff = compare_phash(f1, f2)
+        # Reiniciar puntero
+        images_storage[id1]["file"].seek(0)
+        images_storage[id2]["file"].seek(0)
 
-        # ELA
-        ela1 = generate_ela(f1)
-        ela2 = generate_ela(f2)
+        meta1 = get_metadata_safe(images_storage[id1]["file"])
+        meta2 = get_metadata_safe(images_storage[id2]["file"])
+        images_storage[id1]["file"].seek(0)
+        images_storage[id2]["file"].seek(0)
 
-        ela_diff_percent = compare_ela(ela1, ela2) if ela1 and ela2 else None
+        h1, h2, diff = compare_phash(images_storage[id1]["file"], images_storage[id2]["file"])
+        images_storage[id1]["file"].seek(0)
+        images_storage[id2]["file"].seek(0)
+
+        ela_io1 = generate_ela(images_storage[id1]["file"])
+        ela_io2 = generate_ela(images_storage[id2]["file"])
+        ela_id1 = uuid4().hex
+        ela_id2 = uuid4().hex
+        images_storage[ela_id1] = {"file": ela_io1, "filename": f"ELA_{f1.filename}"}
+        images_storage[ela_id2] = {"file": ela_io2, "filename": f"ELA_{f2.filename}"}
+
+        ela_diff_percent = compare_ela(ela_io1, ela_io2) if ela_io1 and ela_io2 else None
 
         # Informe de casos de prueba
         informe = []
         informe.append("Informe de Casos de Prueba:")
-
-        # Caso 1: original
         informe.append(f"Caso 1: Imagen original '{f1.filename}'")
         informe.append(f"  - Modelo cámara: {meta1['Model']}")
         informe.append(f"  - Fecha de captura: {meta1['DateCreated']}")
@@ -133,7 +142,6 @@ def index():
         informe.append(f"  - Hash perceptual: referencia")
         informe.append(f"  - ELA: referencia")
 
-        # Caso 2: sospechosa
         informe.append(f"Caso 2: Imagen sospechosa '{f2.filename}'")
         software_detected = meta2['Software'] if meta2['Software'] != "desconocido" else "Software no detectado"
         informe.append(f"  - Software: {software_detected}")
@@ -143,7 +151,6 @@ def index():
         if ela_diff_percent is not None:
             informe.append(f"  - ELA comparativa: {ela_diff_percent}% píxeles diferentes")
 
-        # Determinar edición
         editada = False
         if isinstance(diff, int) and diff > 10:
             editada = True
@@ -157,38 +164,22 @@ def index():
             "hash1": h1,
             "hash2": h2,
             "hashdiff": diff,
-            "informe": "\n".join(informe)
+            "informe": "\n".join(informe),
+            "img1_url": url_for('serve_image', img_id=id1),
+            "img2_url": url_for('serve_image', img_id=id2),
+            "ela_url1": url_for('serve_image', img_id=ela_id1),
+            "ela_url2": url_for('serve_image', img_id=ela_id2),
         })
-
-        # Guardar ELA temporal para mostrar en web
-        if ela1:
-            ela1_url = url_for("show_image", img_id=f"1_{uuid4().hex}")
-            context["ela_url1"] = ela1_url
-            app.config[ela1_url] = ela1
-        if ela2:
-            ela2_url = url_for("show_image", img_id=f"2_{uuid4().hex}")
-            context["ela_url2"] = ela2_url
-            app.config[ela2_url] = ela2
-
-        # Guardar original temporal para mostrar en web
-        img1_url = url_for("show_image", img_id=f"o1_{uuid4().hex}")
-        img2_url = url_for("show_image", img_id=f"o2_{uuid4().hex}")
-        app.config[img1_url] = f1
-        app.config[img2_url] = f2
-        context["img1_url"] = img1_url
-        context["img2_url"] = img2_url
 
     return render_template("index.html", **context)
 
-# Ruta para servir imágenes temporales
 @app.route("/image/<img_id>")
-def show_image(img_id):
-    key = request.path
-    file_obj = app.config.get(key)
-    if not file_obj:
+def serve_image(img_id):
+    img_info = images_storage.get(img_id)
+    if not img_info or not img_info["file"]:
         return "Imagen no encontrada", 404
-    file_obj.seek(0)
-    return send_file(file_obj, mimetype="image/png")
+    img_info["file"].seek(0)
+    return send_file(img_info["file"], attachment_filename=img_info["filename"], mimetype='image/png')
 
 # ----------------------- Run -----------------------
 if __name__ == "__main__":
