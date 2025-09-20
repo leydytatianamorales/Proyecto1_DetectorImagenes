@@ -14,8 +14,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-# Para evitar errores de límite de tamaño, puedes comentar la siguiente línea
-# app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
+# app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB, opcional
 
 # ----------------------- Funciones -----------------------
 def allowed_file(filename):
@@ -29,8 +28,13 @@ def save_file_storage(file_storage):
     return unique, path
 
 def extract_metadata(path):
+    """
+    Extrae todos los metadatos EXIF de la imagen si existen.
+    Si no hay EXIF, devuelve información básica de la imagen.
+    """
     meta = {}
     try:
+        # Intentamos cargar EXIF con piexif
         exif_dict = piexif.load(path)
         for ifd in exif_dict:
             for tag, val in exif_dict[ifd].items():
@@ -42,20 +46,20 @@ def extract_metadata(path):
         pass
 
     try:
+        # Intentamos leer EXIF con Pillow
         img = Image.open(path)
         raw = img._getexif()
         if raw:
             for tag, val in raw.items():
                 name = ExifTags.TAGS.get(tag, tag)
                 meta[name] = str(val)
-        if meta:
-            return meta
-        # Si no hay EXIF, añadimos info básica de la imagen
+        # Si aún no hay EXIF, añadimos info básica
         meta["Format"] = img.format
         meta["Mode"] = img.mode
         meta["Size"] = f"{img.width}x{img.height}"
         return meta
     except Exception:
+        # Si la imagen no se puede abrir
         try:
             img = Image.open(path)
             return {"Format": img.format, "Mode": img.mode, "Size": f"{img.width}x{img.height}"}
@@ -65,6 +69,7 @@ def extract_metadata(path):
 def get_metadata_safe(path):
     meta = extract_metadata(path)
     data = {}
+    # Campos principales
     data["Model"] = meta.get("Model") or meta.get("CameraModelName") or "desconocido"
     data["DateCreated"] = meta.get("DateTimeOriginal") or meta.get("DateTime") or "desconocida"
     exif_mod = meta.get("ModifyDate") or meta.get("DateTimeDigitized")
@@ -74,7 +79,7 @@ def get_metadata_safe(path):
         ts = os.path.getmtime(path)
         data["DateModified"] = datetime.fromtimestamp(ts).strftime("%Y:%m:%d %H:%M:%S")
     data["Software"] = meta.get("Software", "desconocido")
-    data["all_metadata"] = meta
+    data["all_metadata"] = meta  # Aquí se incluyen todos los metadatos EXIF o info básica
     return data
 
 def generate_ela(path, out_name_prefix):
@@ -186,6 +191,5 @@ def index():
     return render_template("index.html", **context)
 
 # ----------------------- Run -----------------------
-# No usar app.run en Render; Gunicorn se encargará
+# En Render no se usa app.run, Gunicorn lo maneja
 # app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
