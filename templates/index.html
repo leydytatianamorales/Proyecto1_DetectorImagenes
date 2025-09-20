@@ -32,6 +32,7 @@
 <br><br>
 
 <div class="container">
+
   <!-- Formulario de carga -->
   <div class="card mb-4">
     <div class="card-body">
@@ -54,6 +55,7 @@
   </div>
 
   {% if img1_url and img2_url %}
+  <!-- Imágenes cargadas -->
   <div class="row mb-4">
     <div class="col-md-6 text-center">
       <h5>Original</h5>
@@ -67,6 +69,7 @@
   {% endif %}
 
   {% if meta1 and meta2 %}
+  <!-- Metadatos principales -->
   <div class="row mb-3">
     <div class="col-md-6">
       <div class="card card-meta">
@@ -94,12 +97,13 @@
     </div>
   </div>
 
+  <!-- Metadatos completos -->
   <div class="row mb-4">
     <div class="col-md-6">
       <div class="card card-meta">
         <div class="card-body">
           <h6 class="card-title text-info">Todos los Metadatos - Original</h6>
-          <pre>{{ meta1 | tojson(indent=2) }}</pre>
+          <pre>{{ all_meta1 | tojson(indent=2) }}</pre>
         </div>
       </div>
     </div>
@@ -107,7 +111,7 @@
       <div class="card card-meta">
         <div class="card-body">
           <h6 class="card-title text-info">Todos los Metadatos - Sospechosa</h6>
-          <pre>{{ meta2 | tojson(indent=2) }}</pre>
+          <pre>{{ all_meta2 | tojson(indent=2) }}</pre>
         </div>
       </div>
     </div>
@@ -115,6 +119,7 @@
   {% endif %}
 
   {% if hash1 and hash2 %}
+  <!-- Hashes -->
   <div class="card mb-4 card-hash">
     <div class="card-body">
       <h5 class="card-title text-primary">Hashes Perceptuales</h5>
@@ -126,6 +131,7 @@
   {% endif %}
 
   {% if ela_url1 and ela_url2 %}
+  <!-- Imágenes ELA -->
   <div class="row mb-4">
     <div class="col-md-6 text-center">
       <div class="card card-ela">
@@ -147,6 +153,7 @@
   {% endif %}
 
   {% if informe %}
+  <!-- Informe de Casos de Prueba -->
   <div class="card mb-4 {% if 'Editada' in informe %}card-editada{% else %}card-informe{% endif %}">
     <div class="card-body">
       <h5 class="card-title">Informe de Casos de Prueba</h5>
@@ -162,12 +169,14 @@
   </div>
   {% endif %}
 
+  <!-- Footer -->
   <footer class="bg-white text-center py-3 mt-4 shadow-sm">
-  <small> &copy; 2025 Institución Universitaria Antonio José Camacho. Todos los derechos reservados. <br>
-      Estudiantes: Leydy Tatiana Morales, Gustado Adolfo Salazar, Jaime Quiñones </small>
+    <small>&copy; 2025 Institución Universitaria Antonio José Camacho. Todos los derechos reservados. <br>
+    Estudiantes: Leydy Tatiana Morales, Gustado Adolfo Salazar, Jaime Quiñones </small>
   </footer>
 </div>
 
+<!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
