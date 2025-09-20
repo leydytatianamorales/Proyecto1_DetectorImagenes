@@ -2,35 +2,27 @@
 import os
 from uuid import uuid4
 from datetime import datetime
-from flask import Flask, render_template, request, url_for
+from flask import Flask, render_template, request, url_for, send_file
 from werkzeug.utils import secure_filename
 from PIL import Image, ImageChops, ImageEnhance, ExifTags
 import imagehash
 import piexif
+from io import BytesIO
 
 ALLOWED_EXT = {"png", "jpg", "jpeg", "bmp"}
-UPLOAD_FOLDER = os.path.join("static", "uploads")
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 app = Flask(__name__)
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
 
 # ----------------------- Funciones -----------------------
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
 
-def save_file_storage(file_storage):
-    filename = secure_filename(file_storage.filename)
-    unique = f"{uuid4().hex}_{filename}"
-    path = os.path.join(app.config["UPLOAD_FOLDER"], unique)
-    file_storage.save(path)
-    return unique, path
-
-def extract_metadata(path):
+def extract_metadata(file_obj):
     meta = {}
     try:
-        exif_dict = piexif.load(path)
+        file_obj.seek(0)
+        exif_dict = piexif.load(file_obj.read())
         for ifd in exif_dict:
             for tag, val in exif_dict[ifd].items():
                 name = piexif.TAGS[ifd].get(tag, {}).get("name", str(tag))
@@ -38,7 +30,8 @@ def extract_metadata(path):
         return meta
     except Exception:
         try:
-            img = Image.open(path)
+            file_obj.seek(0)
+            img = Image.open(file_obj)
             raw = img._getexif()
             if raw:
                 for tag, val in raw.items():
@@ -48,8 +41,8 @@ def extract_metadata(path):
         except Exception:
             return {}
 
-def get_metadata_safe(path):
-    meta = extract_metadata(path)
+def get_metadata_safe(file_obj):
+    meta = extract_metadata(file_obj)
     data = {}
     data["Model"] = meta.get("Model") or meta.get("CameraModelName") or "desconocido"
     data["DateCreated"] = meta.get("DateTimeOriginal") or meta.get("DateTime") or "desconocida"
@@ -57,41 +50,45 @@ def get_metadata_safe(path):
     if exif_mod:
         data["DateModified"] = exif_mod
     else:
-        ts = os.path.getmtime(path)
-        data["DateModified"] = datetime.fromtimestamp(ts).strftime("%Y:%m:%d %H:%M:%S")
+        data["DateModified"] = datetime.now().strftime("%Y:%m:%d %H:%M:%S")
     data["Software"] = meta.get("Software", "desconocido")
     data["all_metadata"] = meta
     return data
 
-def generate_ela(path, out_name_prefix):
+def generate_ela(file_obj):
     try:
-        img = Image.open(path).convert("RGB")
-        temp = os.path.join(app.config["UPLOAD_FOLDER"], f"{out_name_prefix}_temp.jpg")
-        img.save(temp, "JPEG", quality=90)
-        comp = Image.open(temp)
+        file_obj.seek(0)
+        img = Image.open(file_obj).convert("RGB")
+        temp_io = BytesIO()
+        img.save(temp_io, "JPEG", quality=90)
+        temp_io.seek(0)
+        comp = Image.open(temp_io)
         diff = ImageChops.difference(img, comp)
         diff = ImageEnhance.Brightness(diff).enhance(30.0)
-        ela_name = f"{out_name_prefix}_ela.png"
-        ela_path = os.path.join(app.config["UPLOAD_FOLDER"], ela_name)
-        diff.save(ela_path)
-        os.remove(temp)
-        return ela_name
+        ela_io = BytesIO()
+        diff.save(ela_io, "PNG")
+        ela_io.seek(0)
+        return ela_io
     except Exception as e:
         print("ELA error:", e)
         return None
 
-def compare_phash(path1, path2):
+def compare_phash(file_obj1, file_obj2):
     try:
-        h1 = imagehash.phash(Image.open(path1))
-        h2 = imagehash.phash(Image.open(path2))
+        file_obj1.seek(0)
+        file_obj2.seek(0)
+        h1 = imagehash.phash(Image.open(file_obj1))
+        h2 = imagehash.phash(Image.open(file_obj2))
         return str(h1), str(h2), int(h1 - h2)
     except Exception as e:
         return None, None, f"Error: {e}"
 
-def compare_ela(path1, path2):
+def compare_ela(ela1, ela2):
     try:
-        img1 = Image.open(path1).convert("L")
-        img2 = Image.open(path2).convert("L")
+        ela1.seek(0)
+        ela2.seek(0)
+        img1 = Image.open(ela1).convert("L")
+        img2 = Image.open(ela2).convert("L")
         diff = ImageChops.difference(img1, img2)
         total_pixels = diff.size[0] * diff.size[1]
         nonzero = sum(1 for v in diff.getdata() if v != 0)
@@ -111,20 +108,18 @@ def index():
             context["error"] = "Carga dos imágenes válidas (jpg/png...)"
             return render_template("index.html", **context)
 
-        name1, path1 = save_file_storage(f1)
-        name2, path2 = save_file_storage(f2)
+        # Metadata
+        meta1 = get_metadata_safe(f1)
+        meta2 = get_metadata_safe(f2)
 
-        meta1 = get_metadata_safe(path1)
-        meta2 = get_metadata_safe(path2)
+        # Hash perceptual
+        h1, h2, diff = compare_phash(f1, f2)
 
-        h1, h2, diff = compare_phash(path1, path2)
+        # ELA
+        ela1 = generate_ela(f1)
+        ela2 = generate_ela(f2)
 
-        out_prefix1 = uuid4().hex
-        out_prefix2 = uuid4().hex
-        ela_name1 = generate_ela(path1, out_prefix1)
-        ela_name2 = generate_ela(path2, out_prefix2)
-        ela_url1 = url_for('static', filename=f"uploads/{ela_name1}") if ela_name1 else None
-        ela_url2 = url_for('static', filename=f"uploads/{ela_name2}") if ela_name2 else None
+        ela_diff_percent = compare_ela(ela1, ela2) if ela1 and ela2 else None
 
         # Informe de casos de prueba
         informe = []
@@ -137,7 +132,6 @@ def index():
         informe.append(f"  - Fecha de modificación: {meta1['DateModified']}")
         informe.append(f"  - Hash perceptual: referencia")
         informe.append(f"  - ELA: referencia")
-        
 
         # Caso 2: sospechosa
         informe.append(f"Caso 2: Imagen sospechosa '{f2.filename}'")
@@ -146,14 +140,7 @@ def index():
         informe.append(f"  - Fecha de captura: {meta2['DateCreated']}")
         informe.append(f"  - Fecha de modificación: {meta2['DateModified']}")
         informe.append(f"  - Hash perceptual: Diferencia = {diff}")
-
-        # Comparativa ELA
-        ela_diff_percent = None
-        if ela_name1 and ela_name2:
-            ela_diff_percent = compare_ela(
-                os.path.join(app.config["UPLOAD_FOLDER"], ela_name1),
-                os.path.join(app.config["UPLOAD_FOLDER"], ela_name2)
-            )
+        if ela_diff_percent is not None:
             informe.append(f"  - ELA comparativa: {ela_diff_percent}% píxeles diferentes")
 
         # Determinar edición
@@ -170,14 +157,38 @@ def index():
             "hash1": h1,
             "hash2": h2,
             "hashdiff": diff,
-            "ela_url1": ela_url1,
-            "ela_url2": ela_url2,
-            "informe": "\n".join(informe),
-            "img1_url": url_for('static', filename=f"uploads/{name1}"),
-            "img2_url": url_for('static', filename=f"uploads/{name2}")
+            "informe": "\n".join(informe)
         })
 
+        # Guardar ELA temporal para mostrar en web
+        if ela1:
+            ela1_url = url_for("show_image", img_id=f"1_{uuid4().hex}")
+            context["ela_url1"] = ela1_url
+            app.config[ela1_url] = ela1
+        if ela2:
+            ela2_url = url_for("show_image", img_id=f"2_{uuid4().hex}")
+            context["ela_url2"] = ela2_url
+            app.config[ela2_url] = ela2
+
+        # Guardar original temporal para mostrar en web
+        img1_url = url_for("show_image", img_id=f"o1_{uuid4().hex}")
+        img2_url = url_for("show_image", img_id=f"o2_{uuid4().hex}")
+        app.config[img1_url] = f1
+        app.config[img2_url] = f2
+        context["img1_url"] = img1_url
+        context["img2_url"] = img2_url
+
     return render_template("index.html", **context)
+
+# Ruta para servir imágenes temporales
+@app.route("/image/<img_id>")
+def show_image(img_id):
+    key = request.path
+    file_obj = app.config.get(key)
+    if not file_obj:
+        return "Imagen no encontrada", 404
+    file_obj.seek(0)
+    return send_file(file_obj, mimetype="image/png")
 
 # ----------------------- Run -----------------------
 if __name__ == "__main__":
