@@ -25,7 +25,7 @@
 <!-- Header -->
 <header class="bg-white fixed-top shadow-sm py-3">
   <div class="container d-flex align-items-center">
-    <img src="{{ url_for('static', filename='img/logo1.png') }}" alt="Logo Universidad" class="img-fluid" style="border:none;">
+    <img src="{{ url_for('static', filename='img/logo.PNG') }}" alt="Logo Universidad" class="img-fluid" style="border:none;">
     <h4 class="m-0">Detector Forense de Imágenes Grupo 10</h4>
   </div>
 </header>
@@ -103,7 +103,7 @@
       <div class="card card-meta">
         <div class="card-body">
           <h6 class="card-title text-info">Todos los Metadatos - Original</h6>
-          <pre>{{ meta1 | tojson(indent=2) }}</pre>
+          <pre>{{ meta1.all_metadata | tojson(indent=2) }}</pre>
         </div>
       </div>
     </div>
@@ -111,7 +111,7 @@
       <div class="card card-meta">
         <div class="card-body">
           <h6 class="card-title text-info">Todos los Metadatos - Sospechosa</h6>
-          <pre>{{ meta2 | tojson(indent=2) }}</pre>
+          <pre>{{ meta2.all_metadata | tojson(indent=2) }}</pre>
         </div>
       </div>
     </div>
@@ -172,7 +172,7 @@
   <!-- Footer -->
   <footer class="bg-white text-center py-3 mt-4 shadow-sm">
     <small>&copy; 2025 Institución Universitaria Antonio José Camacho. Todos los derechos reservados.<br>
-      Estudiantes: Leydy Tatiana Morales, Gustado Adolfo Salazar, Jaime Quiñones</small>
+      Estudiantes: Leydy Tatiana Morales, Gustavo Adolfo Salazar Sanchez, Jaime Quiñones</small>
   </footer>
 </div>
 
