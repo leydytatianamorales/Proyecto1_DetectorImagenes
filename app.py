@@ -13,7 +13,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB máximo por imagen
+app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024  # 1 gb
 
 # ----------------------- Funciones -----------------------
 def allowed_file(filename):
@@ -166,8 +166,6 @@ def index():
         context.update({
             "meta1": meta1,
             "meta2": meta2,
-            "all_meta1": meta1["all_metadata"],  # todos los metadatos
-            "all_meta2": meta2["all_metadata"],  # todos los metadatos
             "hash1": h1,
             "hash2": h2,
             "hashdiff": diff,
