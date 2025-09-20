@@ -162,7 +162,7 @@ def index():
             editada = True
         if ela_diff_percent and ela_diff_percent > 2:
             editada = True
-        informe.append(f"  - Estado: {'Editada / Posible manipulación' if editada else 'Sin indicios de edición'}")
+        informe.append(f"  - Estado: {'Editada / Posible manipulación' if editada else 'Importante: Sin indicios de edición'}")
 
         context.update({
             "meta1": meta1,
