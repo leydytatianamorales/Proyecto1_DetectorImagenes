@@ -137,6 +137,7 @@ def index():
         informe.append(f"  - Fecha de modificación: {meta1['DateModified']}")
         informe.append(f"  - Hash perceptual: referencia")
         informe.append(f"  - ELA: referencia")
+        
 
         # Caso 2: sospechosa
         informe.append(f"Caso 2: Imagen sospechosa '{f2.filename}'")
@@ -180,4 +181,4 @@ def index():
 
 # ----------------------- Run -----------------------
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=5000)
