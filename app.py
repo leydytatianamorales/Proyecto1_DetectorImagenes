@@ -1,3 +1,4 @@
+# app.py
 import os
 from uuid import uuid4
 from datetime import datetime
@@ -13,7 +14,8 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024  # 1 gb
+# Para evitar errores de límite de tamaño, puedes comentar la siguiente línea
+# app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
 
 # ----------------------- Funciones -----------------------
 def allowed_file(filename):
@@ -34,16 +36,29 @@ def extract_metadata(path):
             for tag, val in exif_dict[ifd].items():
                 name = piexif.TAGS[ifd].get(tag, {}).get("name", str(tag))
                 meta[name] = val.decode() if isinstance(val, bytes) else str(val)
+        if meta:
+            return meta
+    except Exception:
+        pass
+
+    try:
+        img = Image.open(path)
+        raw = img._getexif()
+        if raw:
+            for tag, val in raw.items():
+                name = ExifTags.TAGS.get(tag, tag)
+                meta[name] = str(val)
+        if meta:
+            return meta
+        # Si no hay EXIF, añadimos info básica de la imagen
+        meta["Format"] = img.format
+        meta["Mode"] = img.mode
+        meta["Size"] = f"{img.width}x{img.height}"
         return meta
     except Exception:
         try:
             img = Image.open(path)
-            raw = img._getexif()
-            if raw:
-                for tag, val in raw.items():
-                    name = ExifTags.TAGS.get(tag, tag)
-                    meta[name] = str(val)
-            return meta
+            return {"Format": img.format, "Mode": img.mode, "Size": f"{img.width}x{img.height}"}
         except Exception:
             return {}
 
@@ -63,18 +78,17 @@ def get_metadata_safe(path):
     return data
 
 def generate_ela(path, out_name_prefix):
-    """Genera la imagen ELA y la guarda en uploads temporalmente."""
     try:
         img = Image.open(path).convert("RGB")
-        temp_path = os.path.join(app.config["UPLOAD_FOLDER"], f"{out_name_prefix}_temp.jpg")
-        img.save(temp_path, "JPEG", quality=90)
-        comp = Image.open(temp_path)
+        temp = os.path.join(app.config["UPLOAD_FOLDER"], f"{out_name_prefix}_temp.jpg")
+        img.save(temp, "JPEG", quality=90)
+        comp = Image.open(temp)
         diff = ImageChops.difference(img, comp)
         diff = ImageEnhance.Brightness(diff).enhance(30.0)
         ela_name = f"{out_name_prefix}_ela.png"
         ela_path = os.path.join(app.config["UPLOAD_FOLDER"], ela_name)
         diff.save(ela_path)
-        os.remove(temp_path)  # eliminar temporal
+        os.remove(temp)
         return ela_name
     except Exception as e:
         print("ELA error:", e)
@@ -126,19 +140,14 @@ def index():
         ela_url1 = url_for('static', filename=f"uploads/{ela_name1}") if ela_name1 else None
         ela_url2 = url_for('static', filename=f"uploads/{ela_name2}") if ela_name2 else None
 
-        # Informe de casos de prueba
         informe = []
         informe.append("Informe de Casos de Prueba:")
-
-        # Caso 1: original
         informe.append(f"Caso 1: Imagen original '{f1.filename}'")
         informe.append(f"  - Modelo cámara: {meta1['Model']}")
         informe.append(f"  - Fecha de captura: {meta1['DateCreated']}")
         informe.append(f"  - Fecha de modificación: {meta1['DateModified']}")
         informe.append(f"  - Hash perceptual: referencia")
         informe.append(f"  - ELA: referencia")
-
-        # Caso 2: sospechosa
         informe.append(f"Caso 2: Imagen sospechosa '{f2.filename}'")
         software_detected = meta2['Software'] if meta2['Software'] != "desconocido" else "Software no detectado"
         informe.append(f"  - Software: {software_detected}")
@@ -146,7 +155,6 @@ def index():
         informe.append(f"  - Fecha de modificación: {meta2['DateModified']}")
         informe.append(f"  - Hash perceptual: Diferencia = {diff}")
 
-        # Comparativa ELA
         ela_diff_percent = None
         if ela_name1 and ela_name2:
             ela_diff_percent = compare_ela(
@@ -155,7 +163,6 @@ def index():
             )
             informe.append(f"  - ELA comparativa: {ela_diff_percent}% píxeles diferentes")
 
-        # Determinar edición
         editada = False
         if isinstance(diff, int) and diff > 10:
             editada = True
@@ -179,5 +186,6 @@ def index():
     return render_template("index.html", **context)
 
 # ----------------------- Run -----------------------
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+# No usar app.run en Render; Gunicorn se encargará
+# app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
