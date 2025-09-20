@@ -166,6 +166,8 @@ def index():
         context.update({
             "meta1": meta1,
             "meta2": meta2,
+            "all_meta1": meta1["all_metadata"],  # todos los metadatos
+            "all_meta2": meta2["all_metadata"],  # todos los metadatos
             "hash1": h1,
             "hash2": h2,
             "hashdiff": diff,
